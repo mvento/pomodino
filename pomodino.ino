@@ -5,21 +5,102 @@
 #include <SPI.h>
 #include <DMD2.h>
 #include <fonts/Droid_Sans_12.h>
-
-
+#include "DHT.h"
+#define DHTTYPE DHT22 
+#define DHTPIN 3
 
 
 SoftDMD dmd(1,1);  // DMD controls the entire display
 DMD_TextBox box(dmd, 3, 3, 32, 16);  // "box" provides a text box to automatically write to/scroll the display
 int speakerPin = 2;
+int dht22Pin = 3;
+
+
+enum 
+{
+  DISPLAY_POMODORO,
+  DISPLAY_TEMP,
+};
+
+
+
+class DhtSensor {
+public:
+  int temperature;
+  int humidity;
+
+  DhtSensor() {
+    temperature = 0;
+    humidity = 0;
+    dht = new DHT(DHTPIN, DHTTYPE);
+    dht->begin();
+
+
+  }
+
+  char * toString() {
+
+    char screen[5];
+    screen[4] = 0;
+
+   this->humidity = dht->readHumidity();
+   this->temperature = dht->readTemperature();
+
+    sprintf(screen, "%02d%02d\%", this->temperature, this->humidity);
+
+    Serial.println(screen);
+
+    return screen;
+  }
+
+  void check() {
+    // Reading temperature or humidity takes about 250 milliseconds!
+    // Sensor readings may also be up to 2 seconds 'old' (its a very slow sensor)
+    float h = dht->readHumidity();
+    // Read temperature as Celsius (the default)
+    float t = dht->readTemperature();
+    // Read temperature as Fahrenheit (isFahrenheit = true)
+    float f = dht->readTemperature(true);
+
+    // Check if any reads failed and exit early (to try again).
+    if (isnan(h) || isnan(t) || isnan(f)) {
+      Serial.println("Failed to read from DHT sensor!");
+      return;
+    }
+
+    // Compute heat index in Fahrenheit (the default)
+    float hif = dht->computeHeatIndex(f, h);
+    // Compute heat index in Celsius (isFahreheit = false)
+    float hic = dht->computeHeatIndex(t, h, false);
+
+    // Serial.print("Humidity: ");
+    // Serial.print(h);
+    // Serial.print(" %\t");
+    // Serial.print("Temperature: ");
+    // Serial.print(t);
+    // Serial.print(" *C ");
+    // Serial.print(f);
+    // Serial.print(" *F\t");
+    // Serial.print("Heat index: ");
+    // Serial.print(hic);
+    // Serial.print(" *C ");
+    // Serial.print(hif);
+    // Serial.println(" *F");
+
+  }
+
+  DHT * dht;
+
+};
+
 
 class Countdown
 {
 public:
   Countdown(unsigned long totalMinutes = 0) {
-    _startedAt = millis();
-    unsigned long totalMilliseconds = totalMinutes * 60 * 1000;
-    _finishAt = _startedAt + totalMilliseconds;
+    this->_startedAt = millis();
+    this->_totalMilliseconds = totalMinutes * 60 * 1000;
+    this->_finishAt = _startedAt + this->_totalMilliseconds;
   }
 
   unsigned long secondsLeft() {
@@ -34,6 +115,11 @@ public:
       return true;
     
     return false;
+  }
+
+  void reset() {
+     _startedAt = millis();
+    _finishAt = _startedAt + this->_totalMilliseconds;
   }
 
 
@@ -56,6 +142,7 @@ public:
 private:
   unsigned long _startedAt;  
   unsigned long _finishAt;
+  unsigned long _totalMilliseconds;
 };
 
 
@@ -156,8 +243,8 @@ public:
   
   void println(char * stringToPrint) {
 
-    Serial.println(stringToPrint);
-    Serial.println(_lastPrinted);
+    // Serial.println(stringToPrint);
+    // Serial.println(_lastPrinted);
     if (!strcmp(stringToPrint, _lastPrinted))
       return;
 
@@ -172,6 +259,63 @@ public:
     
 };
 
+class Pomodino {
+public:
+  Pomodino() {
+    pomodoro = new Pomodoro();
+    dhtSensor = new DhtSensor();
+
+    checkTemperature = new Countdown(minutesToCheckTemperature);
+    displayTemperature = new Countdown(minutesToDisplayTemperature);
+
+    displayState = DISPLAY_TEMP;
+  }
+
+  void display() {
+    switch (displayState) {
+      case DISPLAY_POMODORO:
+        output.println(pomodoro->getCountdown().toString());
+        break;
+
+      case DISPLAY_TEMP:
+        dhtSensor->check();
+        output.println(dhtSensor->toString());
+        break;
+    }
+  }
+
+  void check() {
+    pomodoro->check();
+    if (checkTemperature->isFinished()) {
+      checkTemperature->reset();
+      dhtSensor->check();   
+      displayState = DISPLAY_TEMP;
+      displayTemperature->reset();
+    }
+
+    if (displayState == DISPLAY_TEMP && displayTemperature->isFinished()) {
+      displayState = DISPLAY_POMODORO;
+    }
+
+    this->display();
+
+    delay(250);
+  }
+
+private:
+  unsigned int displayState;
+  unsigned int minutesToCheckTemperature = 3;
+  unsigned int minutesToDisplayTemperature = 1;
+
+  Countdown * checkTemperature;
+  Countdown * displayTemperature;
+
+  Pomodoro * pomodoro;
+  DhtSensor * dhtSensor;
+  Output output;
+
+};
+
 
 //////////////////////////////////////////////
 
@@ -181,26 +325,22 @@ void initDmd() {
   dmd.begin();
 }
 
-Pomodoro * pomodoro;
+
 
 unsigned long lastSecondsLeft;
-Output output;
+Pomodino * pomodino;
 
+DhtSensor * dhtSensor;
 
 
 void setup() {
-  Serial.begin (9600);
+  Serial.begin (115200);
   initDmd();
   pinMode(speakerPin, OUTPUT);
-  pomodoro = new Pomodoro();
+  pomodino = new Pomodino();
 }
 
 void loop() {
-    pomodoro->check();
-
-    output.println(pomodoro->getCountdown().toString());
-
-  delay(250);
-
-}
+  pomodino->check();
+} 
 
