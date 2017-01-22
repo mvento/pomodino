@@ -11,7 +11,7 @@
 
 SoftDMD dmd(1,1);  // DMD controls the entire display
 DMD_TextBox box(dmd, 3, 3, 32, 16);  // "box" provides a text box to automatically write to/scroll the display
-
+int speakerPin = 2;
 
 class Countdown
 {
@@ -73,23 +73,55 @@ public:
     _actualCountDown = getNextCountDown();
   }
 
+void startbreakNotification() {
+  digitalWrite(speakerPin, HIGH);
+  delay(250);
+  digitalWrite(speakerPin, LOW);
+
+}
+
+void startlongbreakNotification() {
+  for (int i=0; i<2; i++) {
+    digitalWrite(speakerPin, HIGH);
+    delay(50);
+    digitalWrite(speakerPin, LOW);
+    delay(50);
+  }
+  digitalWrite(speakerPin, HIGH);
+  delay(250);
+  digitalWrite(speakerPin, LOW);
+}
+
+void startworkNotification() {
+  for (int i=0; i<2; i++) {
+    digitalWrite(speakerPin, HIGH);
+    delay(50);
+    digitalWrite(speakerPin, LOW);
+    delay(50);
+  }
+}
+
+
 
 Countdown getNextCountDown () {
 
   if (!(_actualSession % 2)) {
       _actualSession++;
       Serial.println("WORK_SESSION");
+      this->startworkNotification();
       return Countdown(WORK_SESSION);
   }
 
   if (_actualSession < WORK_SESSIONS_BEFORE_LONG_BREAK * 2) {
       _actualSession++;
+      this->startbreakNotification();
       Serial.println("BREAK_DURATION");
       return Countdown(BREAK_DURATION);
   }
 
   _actualSession = 0;
   Serial.println("LONG_BREAK_DURATION");
+  this->startlongbreakNotification();
   return Countdown(LONG_BREAK_DURATION);
 
 }
@@ -97,7 +129,6 @@ Countdown getNextCountDown () {
 bool check() {
   if ( _actualCountDown.isFinished() ) {
     _actualCountDown = this->getNextCountDown();
-
 
   }
 }
@@ -157,15 +188,13 @@ Output output;
 
 
 
-// the setup routine runs once when you press reset:
 void setup() {
   Serial.begin (9600);
   initDmd();
+  pinMode(speakerPin, OUTPUT);
   pomodoro = new Pomodoro();
-
 }
 
-// the loop routine runs over and over again forever:
 void loop() {
     pomodoro->check();
 
